@@ -1,5 +1,6 @@
 //! Vehicle scheduling and delivery time estimation.
 
+use crate::cost::calculate_cost;
 
 /// Input description of a single package for scheduling.
 #[derive(Debug, Clone)]
@@ -26,11 +27,17 @@ pub struct PackageDeliveryResult {
 /// Truncates a floating-point value to exactly two decimal places. Everything after
 /// the second decimal place is discarded.
 pub fn truncate_to_2dp(value: f64) -> f64 {
-    todo!()
+    (value * 100.0).floor() / 100.0
 }
 
-/// Schedules deliveries for a fleet of identical vehicles and returns one
-/// `PackageDeliveryResult` per package, in the same order as `packages`.
+/// TODO: Selects the best subset of `remaining` package indices to load onto one vehicle.
+/// To find heaviest subset
+fn best_subset(remaining: &[usize], packages: &[PackageInput], max_weight_kg: f64) -> Vec<usize> {
+    let mut best_subset: Vec<usize> = Vec::new();
+    best_subset
+}
+
+/// Schedules deliveries for a group of vehicles
 pub fn schedule_deliveries(
     packages: &[PackageInput],
     base_delivery_cost: f64,
@@ -38,7 +45,55 @@ pub fn schedule_deliveries(
     max_speed_kmhr: f64,
     max_weight_kg: f64,
 ) -> Vec<PackageDeliveryResult> {
-    todo!()
+    // Pre-compute costs for every package using the cost module
+    let costs: Vec<_> = packages
+        .iter()
+        .map(|p| {
+            calculate_cost(
+                &p.pkg_id,
+                p.weight_kg,
+                p.distance_km,
+                &p.offer_code,
+                base_delivery_cost,
+            )
+        })
+        .collect();
+
+    // Remaining undelivered package indices.
+    let mut undelivered: Vec<usize> = (0..packages.len()).collect();
+
+    // When each vehicle next becomes available (all start at t = 0)
+    let mut vehicle_available: Vec<f64> = vec![0.0; num_vehicles];
+
+    // Delivery time for each package index; filled in as shipments depart
+    let mut delivery_times: Vec<Option<f64>> = vec![None; packages.len()];
+
+    while !undelivered.is_empty() {
+        // Find the vehicle with the earliest availability time.
+        let (vehicle_idx, &current_time) = vehicle_available
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .expect("at least one vehicle exists");
+
+        // Choose the best subset from alist of undelivered packages
+        let shipment = best_subset(&undelivered, packages, max_weight_kg);
+
+        // TODO: Compute delivery times and find the max distance in this shipment
+    }
+
+    // Assemble results
+    packages
+        .iter()
+        .enumerate()
+        .map(|(i, p)| PackageDeliveryResult {
+            pkg_id: p.pkg_id.clone(),
+            discount: costs[i].discount,
+            total_cost: costs[i].total_cost,
+            delivery_time_hrs: delivery_times[i]
+                .expect("every package must have been delivered"),
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
