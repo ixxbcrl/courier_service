@@ -1,5 +1,7 @@
 //! Delivery cost calculation.
 
+use crate::offers::{applicable_discount, find_offer};
+
 /// The computed cost outcome for a single package.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PackageCostResult {
@@ -12,6 +14,10 @@ pub struct PackageCostResult {
 }
 
 /// Calculates the delivery cost for a single package.
+///
+/// Formula: `base_delivery_cost + (weight_kg * 10) + (distance_km * 5)`.
+/// If `offer_code` matches a known offer whose eligibility criteria are met, the
+/// discount is subtracted from the raw cost to produce `total_cost`.
 pub fn calculate_cost(
     pkg_id: &str,
     weight_kg: f64,
@@ -19,15 +25,30 @@ pub fn calculate_cost(
     offer_code: &str,
     base_delivery_cost: f64,
 ) -> PackageCostResult {
-    todo!()
+    let raw_cost = base_delivery_cost + (weight_kg * 10.0) + (distance_km * 5.0);
+    let discount = find_offer(offer_code)
+        .map(|offer| applicable_discount(offer, weight_kg, distance_km, raw_cost))
+        .unwrap_or(0.0);
+    PackageCostResult {
+        pkg_id: pkg_id.to_string(),
+        discount,
+        total_cost: raw_cost - discount,
+    }
 }
 
 /// Calculates costs for a batch of packages and returns results in input order.
+///
+/// Each tuple is `(pkg_id, weight_kg, distance_km, offer_code)`.
 pub fn calculate_costs(
     packages: &[(&str, f64, f64, &str)],
     base_delivery_cost: f64,
 ) -> Vec<PackageCostResult> {
-    todo!()
+    packages
+        .iter()
+        .map(|&(pkg_id, weight_kg, distance_km, offer_code)| {
+            calculate_cost(pkg_id, weight_kg, distance_km, offer_code, base_delivery_cost)
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

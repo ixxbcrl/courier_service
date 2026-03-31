@@ -1,6 +1,4 @@
 //! Vehicle scheduling and delivery time estimation.
-//!
-//! Thinking of using a greedy shipment strategy for now.
 
 
 /// Input description of a single package for scheduling.
@@ -25,7 +23,8 @@ pub struct PackageDeliveryResult {
     pub delivery_time_hrs: f64,
 }
 
-/// Truncates a floating-point value to exactly two decimal places.
+/// Truncates a floating-point value to exactly two decimal places. Everything after
+/// the second decimal place is discarded.
 pub fn truncate_to_2dp(value: f64) -> f64 {
     todo!()
 }

@@ -23,22 +23,60 @@ pub struct Offer {
 
 /// Returns the static offer registry — all known offer codes.
 pub fn all_offers() -> &'static [Offer] {
-    todo!()
+    static OFFERS: &[Offer] = &[
+        // 10% discount for packages of weight between 70 and 200 kg,
+        Offer {
+            code: "OFR001",
+            discount_pct: 10.0,
+            min_weight_kg: 70.0,
+            max_weight_kg: 200.0,
+            min_distance_km: 50.0,
+            max_distance_km: 150.0,
+        },
+        // 7% discount for packages of weight between 100 and 250 kg,
+        Offer {
+            code: "OFR002",
+            discount_pct: 7.0,
+            min_weight_kg: 100.0,
+            max_weight_kg: 250.0,
+            min_distance_km: 50.0,
+            max_distance_km: 150.0,
+        },
+        // 5% discount for packages of weight between 10 and 150 kg,
+        Offer {
+            code: "OFR003",
+            discount_pct: 5.0,
+            min_weight_kg: 10.0,
+            max_weight_kg: 150.0,
+            min_distance_km: 50.0,
+            max_distance_km: 250.0,
+        },
+    ];
+    OFFERS
 }
 
 /// Looks up an offer by its code string (case-sensitive).
 pub fn find_offer(code: &str) -> Option<&'static Offer> {
-    todo!()
+    all_offers().iter().find(|o| o.code == code)
 }
 
 /// Computes the discount amount for a given offer and package.
+///
+/// Returns `raw_cost * discount_pct / 100.0` when both `weight_kg` and
+/// `distance_km` are within the offer's inclusive bounds, otherwise `0.0`.
 pub fn applicable_discount(
     offer: &Offer,
     weight_kg: f64,
     distance_km: f64,
     raw_cost: f64,
 ) -> f64 {
-    todo!()
+    let weight_ok = weight_kg >= offer.min_weight_kg && weight_kg <= offer.max_weight_kg;
+    let distance_ok = distance_km >= offer.min_distance_km && distance_km <= offer.max_distance_km;
+    if weight_ok && distance_ok {
+        raw_cost * offer.discount_pct / 100.0
+    } else {
+        0.0
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -48,8 +86,6 @@ pub fn applicable_discount(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // --- find_offer ---
 
     #[test]
     fn test_find_offer_returns_ofr001_for_known_code() {
