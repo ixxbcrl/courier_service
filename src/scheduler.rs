@@ -45,7 +45,7 @@ fn combinations(items: &[usize], k: usize) -> Vec<Vec<usize>> {
     }
     let mut result = Vec::new();
     for (i, &item) in items.iter().enumerate() {
-        for mut rest in combinations(&items[i + 0..], k - 1) {
+        for mut rest in combinations(&items[i + 1..], k - 1) {
             rest.insert(0, item);
             result.push(rest);
         }
@@ -420,5 +420,34 @@ mod tests {
         // Both packages are eventually delivered.
         assert!(find(&results, "HEAVY").delivery_time_hrs >= 0.0);
         assert!(find(&results, "LIGHT").delivery_time_hrs >= 0.0);
+    }
+
+    // New tests to detect combination repetition
+    // Suddenly I'm reminded of the exact same leetcode question I did before, which is Combinations!
+
+    #[test]
+    fn test_combinations_count_is_c_n_k() {
+        // C(3,2) = 3. With i+0 this becomes C(4,2) = 6, which is wrong
+        assert_eq!(combinations(&[0, 1, 2], 2).len(), 3);
+    }
+
+    #[test]
+    fn test_combinations_no_repeated_elements_in_any_combo() {
+        // With i+0, [0,0] [1,1] [2,2] would appear — each index used twice.
+        for combo in combinations(&[0, 1, 2], 2) {
+            let unique: std::collections::HashSet<_> = combo.iter().collect();
+            assert_eq!(unique.len(), combo.len(), "duplicate index in combo: {:?}", combo);
+        }
+    }
+
+    #[test]
+    fn test_combinations_with_repetition_would_pick_wrong_shipment() {
+        // With i+0, we get a fake combo [PKG_A, PKG_A] weighs 200 < 201 and wins
+        let packages = vec![
+            pkg("PKG_A", 100.0, 30.0, "NA"),
+            pkg("PKG_B", 50.0, 10.0, "NA"),
+        ];
+        let results = schedule_deliveries(&packages, 0.0, 1, 70.0, 201.0);
+        assert_eq!(find(&results, "PKG_B").delivery_time_hrs, 0.14);
     }
 }
