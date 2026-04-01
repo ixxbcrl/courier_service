@@ -1,4 +1,8 @@
 //! Vehicle scheduling and delivery time estimation.
+//!
+//! The rough idea: At each step the next available vehicle
+//! loads the best possible combination of undelivered packages (maximise count,
+//! then total weight, then minimise max distance) and departs for the task.
 
 use crate::cost::calculate_cost;
 
@@ -30,14 +34,88 @@ pub fn truncate_to_2dp(value: f64) -> f64 {
     (value * 100.0).floor() / 100.0
 }
 
-/// TODO: Selects the best subset of `remaining` package indices to load onto one vehicle.
-/// To find heaviest subset
-fn best_subset(remaining: &[usize], packages: &[PackageInput], max_weight_kg: f64) -> Vec<usize> {
-    let mut best_subset: Vec<usize> = Vec::new();
-    best_subset
+/// Returns all combinations of exactly `k` elements chosen from `items`.
+/// Simple C(n, k)
+fn combinations(items: &[usize], k: usize) -> Vec<Vec<usize>> {
+    if k == 0 {
+        return vec![vec![]];
+    }
+    if items.len() < k {
+        return vec![];
+    }
+    let mut result = Vec::new();
+    for (i, &item) in items.iter().enumerate() {
+        for mut rest in combinations(&items[i + 0..], k - 1) {
+            rest.insert(0, item);
+            result.push(rest);
+        }
+    }
+    result
 }
 
-/// Schedules deliveries for a group of vehicles
+/// Selects the best subset of `remaining` package indices to load onto one vehicle.
+///
+/// Two stages:
+/// - Stage 1: sort by weight ascending, brute force count how many packages fit → max count (k).
+/// - Stage 2: among all `k`-combinations, pick the heaviest valid subset;
+///   break ties by smallest max distance.
+fn best_subset(remaining: &[usize], packages: &[PackageInput], max_weight_kg: f64) -> Vec<usize> {
+    // Stage 1: find the maximum number of packages that can fit (just a brute force count)
+    let mut by_weight_asc = remaining.to_vec();
+    by_weight_asc.sort_by(|&a, &b| packages[a].weight_kg.partial_cmp(&packages[b].weight_kg).unwrap());
+
+    let mut k = 0;
+    let mut running = 0.0_f64;
+
+    // we're just accumulating (blindly) with the lightest package first until we hit the max weight
+    for &idx in &by_weight_asc {
+        let next = running + packages[idx].weight_kg;
+        if next < max_weight_kg {
+            running = next;
+            k += 1;
+        } else {
+            break;
+        }
+    }
+
+    if k == 0 {
+        return vec![];
+    }
+
+    // Stage 2: among all k-combinations, pick the heaviest valid subset
+    // Tiebreak by smallest max distance so the vehicle returns soonest
+    let mut best: Vec<usize> = Vec::new();
+    let mut best_weight = -1.0_f64;
+    let mut best_max_dist = f64::MAX;
+
+    // We're just doing a C(n, k) here bounded by k no. of packages
+    for combo in combinations(&by_weight_asc, k) {
+        let total_weight: f64 = combo.iter().map(|&i| packages[i].weight_kg).sum();
+        if total_weight >= max_weight_kg {
+            continue;
+        }
+        let max_dist = combo.iter().map(|&i| packages[i].distance_km).fold(0.0_f64, f64::max);
+
+        // Primary goal here: maximize the total weight of the subset, break ties by max distance
+        if total_weight > best_weight
+            || (total_weight == best_weight && max_dist > best_max_dist)
+        {
+            best = combo;
+            best_weight = total_weight;
+            best_max_dist = max_dist;
+        }
+    }
+
+    best
+}
+
+/// Schedules deliveries for a fleet of identical vehicles and returns one
+/// `PackageDeliveryResult` per package, in the same order as `packages`.
+///
+/// Each iteration picks the vehicle that becomes available soonest, loads it
+/// with the best feasible shipment of undelivered packages, records delivery
+/// times, and advances the vehicle's availability clock by
+/// `2 * truncate_to_2dp(max_distance / speed)` - for round trip
 pub fn schedule_deliveries(
     packages: &[PackageInput],
     base_delivery_cost: f64,
@@ -78,11 +156,27 @@ pub fn schedule_deliveries(
 
         // Choose the best subset from alist of undelivered packages
         let shipment = best_subset(&undelivered, packages, max_weight_kg);
+        // Compute delivery times and find the max distance in this shipment
+        let mut max_dist_in_shipment = 0.0_f64;
+        for &pkg_idx in &shipment {
+            let delivery_time =
+                truncate_to_2dp(current_time + packages[pkg_idx].distance_km / max_speed_kmhr);
+            delivery_times[pkg_idx] = Some(delivery_time);
+            if packages[pkg_idx].distance_km > max_dist_in_shipment {
+                max_dist_in_shipment = packages[pkg_idx].distance_km;
+            }
+        }
 
-        // TODO: Compute delivery times and find the max distance in this shipment
+        // Vehicle return time uses the truncated one-way travel to the farthest
+        let one_way_truncated = truncate_to_2dp(max_dist_in_shipment / max_speed_kmhr);
+        vehicle_available[vehicle_idx] = current_time + 2.0 * one_way_truncated;
+
+        // Remove shipped packages from the undelivered set.
+        let shipment_set: std::collections::HashSet<usize> = shipment.into_iter().collect();
+        undelivered.retain(|idx| !shipment_set.contains(idx));
     }
 
-    // Assemble results
+    // Assemble results in the original input order.
     packages
         .iter()
         .enumerate()

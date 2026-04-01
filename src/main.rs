@@ -32,6 +32,7 @@ fn main() {
         eprintln!("Not enough package lines in input.");
         std::process::exit(1);
     }
+
     let mut pkg_ids: Vec<String> = Vec::with_capacity(n_packages);
     let mut pkg_weights: Vec<f64> = Vec::with_capacity(n_packages);
     let mut pkg_distances: Vec<f64> = Vec::with_capacity(n_packages);
