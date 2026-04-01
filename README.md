@@ -11,11 +11,11 @@ Given a base delivery cost and a list of packages, the app calculates the total 
 
 First create a file for the std input. I've placed the sample input values in input.txt.
 
-Build and run via stdin:
+Build and run via stdin (change input_p1.txt to any input file you'd like):
 
 ```bash
 cargo build --release
-target\release\courier_service.exe < input.txt
+target\release\courier_service.exe < input_p1.txt
 ```
 
 Or pipe directly without build:
