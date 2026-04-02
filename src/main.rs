@@ -73,6 +73,9 @@ fn main() {
         bail("line 1: expected 'base_delivery_cost no_of_packages'");
     }
     let base_delivery_cost = parse_f64(first[0], "base_delivery_cost", 1);
+    if base_delivery_cost < 0.0 {
+        bail("line 1: base_delivery_cost must not be negative");
+    }
     let n_packages = parse_usize(first[1], "no_of_packages", 1);
 
     if lines.len() < 1 + n_packages {
@@ -91,17 +94,25 @@ fn main() {
     for i in 0..n_packages {
         let line_no = i + 2;
         let parts: Vec<&str> = lines[1 + i].split_whitespace().collect();
-        if parts.len() < 4 {
+        if parts.len() != 4 {
             bail(&format!(
-                "line {}: expected 'pkg_id weight_kg distance_km offer_code', got '{}' ({} field(s))",
+                "line {}: expected exactly 4 fields (pkg_id weight_kg distance_km offer_code), got {} in '{}'",
                 line_no,
-                lines[1 + i],
-                parts.len()
+                parts.len(),
+                lines[1 + i]
             ));
         }
         pkg_ids.push(parts[0].to_string());
-        pkg_weights.push(parse_f64(parts[1], "weight_kg", line_no));
-        pkg_distances.push(parse_f64(parts[2], "distance_km", line_no));
+        let weight = parse_f64(parts[1], "weight_kg", line_no);
+        if weight <= 0.0 {
+            bail(&format!("line {}: weight_kg must be positive, got '{}'", line_no, parts[1]));
+        }
+        let distance = parse_f64(parts[2], "distance_km", line_no);
+        if distance <= 0.0 {
+            bail(&format!("line {}: distance_km must be positive, got '{}'", line_no, parts[2]));
+        }
+        pkg_weights.push(weight);
+        pkg_distances.push(distance);
         pkg_offers.push(parts[3].to_string());
     }
 
@@ -121,8 +132,19 @@ fn main() {
             ));
         }
         let num_vehicles = parse_usize(vparts[0], "no_of_vehicles", line_no);
+        if num_vehicles == 0 {
+            bail(&format!("line {}: no_of_vehicles must be at least 1", line_no));
+        }
         let max_speed = parse_f64(vparts[1], "max_speed_kmhr", line_no);
         let max_weight = parse_f64(vparts[2], "max_carriable_weight_kg", line_no);
+        for i in 0..n_packages {
+            if pkg_weights[i] >= max_weight {
+                bail(&format!(
+                    "package '{}' weighs {}kg which meets or exceeds the vehicle limit of {}kg",
+                    pkg_ids[i], pkg_weights[i], max_weight
+                ));
+            }
+        }
 
         let packages: Vec<PackageInput> = (0..n_packages)
             .map(|i| PackageInput {

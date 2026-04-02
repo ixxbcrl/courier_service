@@ -98,7 +98,7 @@ fn best_subset(remaining: &[usize], packages: &[PackageInput], max_weight_kg: f6
 
         // Primary goal here: maximize the total weight of the subset, break ties by max distance
         if total_weight > best_weight
-            || (total_weight == best_weight && max_dist > best_max_dist)
+            || (total_weight == best_weight && max_dist < best_max_dist)
         {
             best = combo;
             best_weight = total_weight;
@@ -123,6 +123,15 @@ pub fn schedule_deliveries(
     max_speed_kmhr: f64,
     max_weight_kg: f64,
 ) -> Vec<PackageDeliveryResult> {
+    assert!(num_vehicles >= 1, "num_vehicles must be at least 1");
+    for p in packages {
+        assert!(
+            p.weight_kg < max_weight_kg,
+            "package '{}' weighs {}kg which meets or exceeds the vehicle limit of {}kg",
+            p.pkg_id, p.weight_kg, max_weight_kg
+        );
+    }
+
     // Pre-compute costs for every package using the cost module
     let costs: Vec<_> = packages
         .iter()
@@ -314,18 +323,17 @@ mod tests {
 
     #[test]
     fn test_vehicle_becomes_available_after_round_trip() {
-        // Single vehicle, two sequential trips.
-        // Trip 1: one package at 70km → delivery=1.0hr; return at 2.0hrs.
-        // Trip 2: one package at 35km → delivery = 2.0 + 0.5 = 2.5hrs.
+        // Single vehicle, two sequential trips. Both packages weigh 100kg (equal),
+        // so the tiebreaker fires: prefer the shorter distance first.
+        // Trip 1: PKG_B at 35km → delivery = truncate(35/70) = 0.50hr; return at 2*0.50 = 1.0hr.
+        // Trip 2: PKG_A at 70km → delivery = truncate(1.0 + 70/70) = 2.0hr.
         let packages = vec![
             pkg("PKG_A", 100.0, 70.0, "NA"),
             pkg("PKG_B", 100.0, 35.0, "NA"),
         ];
         let results = schedule_deliveries(&packages, 100.0, 1, 70.0, 200.0);
-        // PKG_A: 70/70 = 1.0
-        assert_eq!(find(&results, "PKG_A").delivery_time_hrs, 1.0);
-        // PKG_B: vehicle returns after 2*(70/70)=2.0hrs; 2.0 + 35/70 = 2.5
-        assert_eq!(find(&results, "PKG_B").delivery_time_hrs, 2.5);
+        assert_eq!(find(&results, "PKG_B").delivery_time_hrs, 0.50);
+        assert_eq!(find(&results, "PKG_A").delivery_time_hrs, 2.0);
     }
 
     #[test]
@@ -449,5 +457,31 @@ mod tests {
         ];
         let results = schedule_deliveries(&packages, 0.0, 1, 70.0, 201.0);
         assert_eq!(find(&results, "PKG_B").delivery_time_hrs, 0.14);
+    }
+
+    // more edge cases
+
+    #[test]
+    #[should_panic(expected = "num_vehicles must be at least 1")]
+    fn test_schedule_deliveries_panics_with_zero_vehicles() {
+        // 0 vehicles = sad day.
+        let packages = vec![pkg("PKG1", 10.0, 10.0, "NA")];
+        schedule_deliveries(&packages, 0.0, 0, 70.0, 200.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "meets or exceeds the vehicle limit")]
+    fn test_schedule_deliveries_panics_when_package_equals_max_weight() {
+        // A package exactly at the limit can never be loaded (strict <).
+        let packages = vec![pkg("PKG1", 200.0, 10.0, "NA")];
+        schedule_deliveries(&packages, 0.0, 1, 70.0, 200.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "meets or exceeds the vehicle limit")]
+    fn test_schedule_deliveries_panics_when_package_exceeds_max_weight() {
+        // A package heavier than the limit would cause an infinite loop.
+        let packages = vec![pkg("PKG1", 250.0, 10.0, "NA")];
+        schedule_deliveries(&packages, 0.0, 1, 70.0, 200.0);
     }
 }
